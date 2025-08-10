@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 export default function FacetedFilters({ filters, onFilterChange }) {
     const categoriesOptions = ['Electronics', 'Apparel', 'Books', 'Home & Kitchen'];
-    const brandsOptions = ['Brand1','Brand2','Brand41','Sony', 'Samsung', 'Nike', 'HP'];
+    const brandsOptions = ['Sony', 'Samsung', 'Nike', 'HP'];
     const colorOptions = ['Red', 'Blue', 'Green', 'Black'];
     const priceRanges = [
         { label: '$0-50', min: 0, max: 50 },
@@ -54,10 +54,6 @@ export default function FacetedFilters({ filters, onFilterChange }) {
         onFilterChange({ price_min: range.min, price_max: range.max });
     };
 
-    const clearPriceFilter = () => {
-        setSelectedPriceRange({ min: null, max: null });
-        onFilterChange({ price_min: null, price_max: null });
-    };
 
     return (
         <div style={{ padding: '10px', borderRight: '1px solid #ccc', minWidth: '220px' }}>
@@ -107,7 +103,6 @@ export default function FacetedFilters({ filters, onFilterChange }) {
                         {range.label}
                     </label>
                 ))}
-                <button onClick={clearPriceFilter}>Clear Price</button>
             </div>
 
             <div>

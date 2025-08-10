@@ -25,6 +25,8 @@ export default function ProductListPage() {
         },
         price_min: params.get('price_min') ? Number(params.get('price_min')) : null,
         price_max: params.get('price_max') ? Number(params.get('price_max')) : null,
+        sort_by: params.get('sort_by') || '',       // new
+        sort_order: params.get('sort_order') || '', // new
     });
 
     // States
@@ -39,6 +41,8 @@ export default function ProductListPage() {
         price_min: null,
         price_max: null,
     });
+    const [sortBy, setSortBy] = useState('');      // e.g. 'price'|'name'|'date'|'relevance'
+    const [sortOrder, setSortOrder] = useState(''); // 'asc'|'desc'
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -52,13 +56,23 @@ export default function ProductListPage() {
 
             setSearch(searchParams.get('search') || '');
 
-            setFilters(parseFiltersFromParams(searchParams));
+            const parsed = parseFiltersFromParams(searchParams);
+            setFilters({
+                categories: parsed.categories,
+                brands: parsed.brands,
+                attrs: { color: parsed.attrs.color || [] },
+                price_min: parsed.price_min,
+                price_max: parsed.price_max,
+            });
+            setSortBy(parsed.sort_by || '');
+            setSortOrder(parsed.sort_order || '');
 
             initializedRef.current = true;
         }
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // run once
 
-    // Update URL when page, search or filters change (but only after init)
+    // Update URL when page/search/filters/sort change (but only after init)
     useEffect(() => {
         if (!initializedRef.current) return;
 
@@ -71,14 +85,16 @@ export default function ProductListPage() {
         if (filters.attrs.color.length) params.attrs = JSON.stringify({ color: filters.attrs.color });
         if (filters.price_min !== null) params.price_min = filters.price_min;
         if (filters.price_max !== null) params.price_max = filters.price_max;
+        if (sortBy) params.sort_by = sortBy;
+        if (sortOrder) params.sort_order = sortOrder;
 
         const newParamsStr = new URLSearchParams(params).toString();
         if (newParamsStr !== searchParams.toString()) {
             setSearchParams(params, { replace: true });
         }
-    }, [page, search, filters]);
+    }, [page, search, filters, sortBy, sortOrder, setSearchParams, searchParams]);
 
-    // Fetch products from backend on page/search/filters change
+    // Fetch products from backend on page/search/filters/sort change
     useEffect(() => {
         if (!initializedRef.current) return;
 
@@ -96,20 +112,31 @@ export default function ProductListPage() {
         if (filters.price_min !== null) params.set('price_min', filters.price_min);
         if (filters.price_max !== null) params.set('price_max', filters.price_max);
 
+        // send sort_by & sort_order to backend (backend expects these names)
+        if (sortBy) params.set('sort_by', sortBy);
+        if (sortOrder) params.set('sort_order', sortOrder);
+
         fetch(`/api/products?${params.toString()}`)
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+            })
             .then(data => {
-                setProducts(data.products || []);
-                const totalCount = data.total || 0;
-                setTotalCount(totalCount);
-                setTotalPages(Math.ceil(totalCount / pageSize));
+                // backend responds: { products: [...], total, page, pageSize, facets }
+                setProducts(Array.isArray(data.products) ? data.products : []);
+                const total = data.total || 0;
+                setTotalCount(total);
+                setTotalPages(Math.ceil(total / pageSize));
                 setLoading(false);
             })
             .catch(err => {
                 console.error('Fetch error:', err);
+                setProducts([]);
+                setTotalCount(0);
+                setTotalPages(1);
                 setLoading(false);
             });
-    }, [page, search, filters]);
+    }, [page, search, filters, sortBy, sortOrder]);
 
     // Handlers
     const handlePageChange = (newPage) => {
@@ -165,11 +192,40 @@ export default function ProductListPage() {
             price_max: null,
         });
         setSearch('');
+        setSortBy('');
+        setSortOrder('');
     };
 
     const handleProductClick = (id) => {
         navigate(`/product/${id}`);
     };
+
+    // Small sort UI (two selects)
+    const SortControls = () => (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+            <label style={{ fontSize: 14 }}>Sort:</label>
+            <select
+                value={sortBy}
+                onChange={(e) => { setPage(1); setSortBy(e.target.value); }}
+                style={{ padding: 6 }}
+            >
+                <option value="">Default</option>
+                <option value="relevance">Relevance (when searching)</option>
+                <option value="price">Price</option>
+                <option value="name">Name</option>
+                <option value="date">Date</option>
+            </select>
+
+            <select
+                value={sortOrder}
+                onChange={(e) => { setPage(1); setSortOrder(e.target.value); }}
+                style={{ padding: 6 }}
+            >
+                <option value="desc">Desc</option>
+                <option value="asc">Asc</option>
+            </select>
+        </div>
+    );
 
     return (
         <div style={{ display: 'flex', padding: 20 }}>
@@ -177,18 +233,19 @@ export default function ProductListPage() {
             <div style={{ flex: 1, marginLeft: 20 }}>
                 <h1>Advanced Product Catalog</h1>
                 <SearchBar initialSearch={search} onSearch={handleSearch} />
+                <SortControls />
                 <ActiveFilters filters={filters} onRemoveFilter={handleRemoveFilter} onClearAll={handleClearAllFilters} />
                 {loading && <p>Loading products...</p>}
                 {!loading && products.length === 0 && <p>No products found.</p>}
                 {!loading && products.length > 0 && (
                     <>
-                            <ProductList products={products} onProductClick={handleProductClick} />
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
-                                <Pagination currentPage={page} totalPages={totalPages} onPageChange={handlePageChange} />
-                                <div style={{ fontSize: 16, color: '#555', marginLeft: 'auto', paddingLeft: '20px', marginTop: 10 }}>
-                                    <h3>Total items: <strong>{totalCount}</strong></h3>
-                                </div>
+                        <ProductList products={products} onProductClick={handleProductClick} />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
+                            <Pagination currentPage={page} totalPages={totalPages} onPageChange={handlePageChange} />
+                            <div style={{ fontSize: 16, color: '#555', marginLeft: 'auto', paddingLeft: '20px', marginTop: 4 }}>
+                                Total items: <strong>{totalCount}</strong>
                             </div>
+                        </div>
                     </>
                 )}
             </div>
