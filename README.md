@@ -59,4 +59,3 @@ npm install
 # Add "proxy": "http://localhost:4000" in package.json
 # Start the frontend React app
 npm start
-# advanced-product-catalog
